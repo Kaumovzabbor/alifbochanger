@@ -1,1 +1,81 @@
+name: Windows .exe yig'ish
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write   # faqat v* tegi bilan Release yaratish uchun
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Kutubxonalarni o'rnatish
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Testlar
+        run: python -m pytest -q
+
+      - name: .exe yig'ish (bitta fayl)
+        run: >
+          pyinstaller --noconfirm --onefile --windowed --name AlifboKonverter
+          --icon assets\icon.ico
+          --add-data "app\exceptions.json;app"
+          --add-data "app\strings_uz.json;app"
+          --add-data "assets\icon.ico;assets"
+          --collect-all tkinterdnd2 main.py
+
+      - name: Yig'ilgan .exe ni sinash
+        run: python ci/smoke_test.py dist/AlifboKonverter.exe
+
+      - name: Papka varianti (antivirus ogohlantirishi bo'lsa)
+        run: >
+          pyinstaller --noconfirm --onedir --windowed --name AlifboKonverter
+          --distpath dist-onedir --workpath build-onedir
+          --icon assets\icon.ico
+          --add-data "app\exceptions.json;app"
+          --add-data "app\strings_uz.json;app"
+          --add-data "assets\icon.ico;assets"
+          --collect-all tkinterdnd2 main.py
+
+      - name: Papka variantini sinash va zip qilish
+        run: |
+          python ci/smoke_test.py dist-onedir/AlifboKonverter/AlifboKonverter.exe
+          Compress-Archive -Path dist-onedir\AlifboKonverter -DestinationPath AlifboKonverter-papka.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AlifboKonverter-exe
+          path: dist/AlifboKonverter.exe
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AlifboKonverter-papka
+          path: AlifboKonverter-papka.zip
+          if-no-files-found: error
+
+      - name: Release yaratish (v* tegi bo'lsa)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/AlifboKonverter.exe
+            AlifboKonverter-papka.zip
 
